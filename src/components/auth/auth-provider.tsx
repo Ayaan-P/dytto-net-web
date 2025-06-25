@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase/client';
 import type { User } from '@/lib/types';
 
 interface AuthContextType {
@@ -18,37 +19,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Check for existing session
-    const savedUser = localStorage.getItem('dytto-user');
-    if (savedUser) {
+    const checkUser = async () => {
       try {
-        setUser(JSON.parse(savedUser));
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        if (supabaseUser) {
+          const userData: User = {
+            id: supabaseUser.id,
+            email: supabaseUser.email || '',
+            name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || '',
+            preferences: {
+              theme: 'light',
+              notifications: true,
+              reminderFrequency: 'weekly',
+              aiInsights: true,
+            },
+            createdAt: new Date(supabaseUser.created_at),
+          };
+          setUser(userData);
+        }
       } catch (error) {
-        console.error('Error parsing saved user:', error);
-        localStorage.removeItem('dytto-user');
+        console.error('Error checking user:', error);
+      } finally {
+        setIsLoading(false);
       }
-    }
-    setIsLoading(false);
+    };
+
+    checkUser();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          const userData: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || '',
+            preferences: {
+              theme: 'light',
+              notifications: true,
+              reminderFrequency: 'weekly',
+              aiInsights: true,
+            },
+            createdAt: new Date(session.user.created_at),
+          };
+          setUser(userData);
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
-      // Mock login - replace with actual authentication
-      const mockUser: User = {
-        id: '1',
+      const { error } = await supabase.auth.signInWithPassword({
         email,
-        name: email.split('@')[0],
-        preferences: {
-          theme: 'light',
-          notifications: true,
-          reminderFrequency: 'weekly',
-          aiInsights: true,
-        },
-        createdAt: new Date(),
-      };
+        password,
+      });
       
-      setUser(mockUser);
-      localStorage.setItem('dytto-user', JSON.stringify(mockUser));
+      if (error) throw error;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -57,9 +90,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('dytto-user');
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   return (
