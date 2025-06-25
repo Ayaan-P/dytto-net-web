@@ -3,13 +3,13 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, MessageCircle, BarChart3, Target, TreePine } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { PremiumCard } from '@/components/ui/premium-card';
 import { PremiumButton } from '@/components/ui/premium-button';
 import { AddRelationshipModal } from '@/components/modals/add-relationship-modal';
 
 export function QuickActions() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
 
   const quickActions = [
@@ -27,7 +27,7 @@ export function QuickActions() {
       icon: MessageCircle,
       color: 'text-emerald-500',
       bgColor: 'bg-emerald-500/10',
-      action: () => router.push('/relationships'),
+      action: () => navigate('/relationships'),
     },
     {
       title: 'View Analytics',
@@ -35,7 +35,7 @@ export function QuickActions() {
       icon: BarChart3,
       color: 'text-purple-500',
       bgColor: 'bg-purple-500/10',
-      action: () => router.push('/analytics'),
+      action: () => navigate('/analytics'),
     },
     {
       title: 'Check Quests',
@@ -43,7 +43,7 @@ export function QuickActions() {
       icon: Target,
       color: 'text-amber-500',
       bgColor: 'bg-amber-500/10',
-      action: () => router.push('/quests'),
+      action: () => navigate('/quests'),
     },
   ];
 

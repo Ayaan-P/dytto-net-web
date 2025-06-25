@@ -12,8 +12,9 @@ import {
   Moon,
   Sun
 } from 'lucide-react';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/components/theme-provider';
 import { useAppStore } from '@/lib/store';
+import { useAuth } from '@/components/auth/auth-provider';
 import { PremiumButton } from '@/components/ui/premium-button';
 import { PremiumInput } from '@/components/ui/premium-input';
 import {
@@ -25,7 +26,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export function Header() {
-  const { sidebarOpen, setSidebarOpen, user } = useAppStore();
+  const { sidebarOpen, setSidebarOpen } = useAppStore();
+  const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
 
   return (
@@ -96,7 +98,7 @@ export function Header() {
               <span>Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={logout}>
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>
             </DropdownMenuItem>

@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Home, 
@@ -31,7 +30,7 @@ const navigation = [
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const location = useLocation();
   const { user, dashboardStats } = useAppStore();
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -83,9 +82,9 @@ export function Sidebar() {
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2">
           {navigation.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = location.pathname === item.href;
             return (
-              <Link key={item.name} href={item.href}>
+              <Link key={item.name} to={item.href}>
                 <motion.div
                   whileHover={{ x: 4 }}
                   whileTap={{ scale: 0.98 }}
