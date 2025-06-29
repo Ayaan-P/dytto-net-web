@@ -4,9 +4,12 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { User } from '@/lib/types';
 
+import { AuthError } from '@supabase/supabase-js';
+
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>; // Changed return type to Promise<void>
   logout: () => void;
   isLoading: boolean;
 }
@@ -99,8 +102,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signUp = async (email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      // No explicit return needed for Promise<void>
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      setIsLoading(false);
+      throw error; // Re-throw the error to be caught by the caller (AuthPage)
+    } finally {
+      setIsLoading(false); // Ensure loading state is updated
+    }
+  };
+
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, signUp, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

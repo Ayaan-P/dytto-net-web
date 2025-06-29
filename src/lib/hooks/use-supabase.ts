@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase, auth, db } from '@/lib/supabase/client'
+import { supabase, auth } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 
 export function useAuth() {
@@ -8,7 +8,7 @@ export function useAuth() {
 
   useEffect(() => {
     // Get initial session
-    auth.getSession().then(({ session }) => {
+    auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
     })
@@ -28,7 +28,7 @@ export function useAuth() {
     user,
     loading,
     signUp: auth.signUp,
-    signIn: auth.signIn,
+    signIn: auth.signInWithPassword, // Assuming password-based sign-in
     signOut: auth.signOut
   }
 }
@@ -40,7 +40,7 @@ export function useProfile() {
 
   useEffect(() => {
     if (user) {
-      db.getProfile(user.id).then(({ data, error }) => {
+      supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data, error }) => {
         if (!error && data) {
           setProfile(data)
         }
@@ -55,7 +55,7 @@ export function useProfile() {
   const updateProfile = async (updates: any) => {
     if (!user) return { error: new Error('No user') }
     
-    const { data, error } = await db.updateProfile(user.id, updates)
+    const { data, error } = await supabase.from('profiles').update(updates).eq('id', user.id).select().single()
     if (!error && data) {
       setProfile(data)
     }
@@ -75,12 +75,12 @@ export function useRelationships() {
 
   const fetchRelationships = async () => {
     setLoading(true)
-    const { data, error } = await db.getRelationships()
+    const { data, error } = await supabase.from('relationships').select('*, relationship_categories(categories(*))')
     if (!error && data) {
       // Transform data to match frontend format
       const transformedData = data.map(rel => ({
         ...rel,
-        categories: rel.relationship_categories?.map(rc => ({
+        categories: rel.relationship_categories?.map((rc: { categories: { id: string; name: string; color: string; icon: string; } }) => ({
           id: rc.categories.id,
           name: rc.categories.name,
           color: rc.categories.color,
@@ -97,7 +97,7 @@ export function useRelationships() {
   }, [])
 
   const createRelationship = async (relationshipData: any) => {
-    const { data, error } = await db.createRelationship(relationshipData)
+    const { data, error } = await supabase.from('relationships').insert(relationshipData).select().single()
     if (!error) {
       await fetchRelationships() // Refresh list
     }
@@ -105,7 +105,7 @@ export function useRelationships() {
   }
 
   const updateRelationship = async (id: string, updates: any) => {
-    const { data, error } = await db.updateRelationship(id, updates)
+    const { data, error } = await supabase.from('relationships').update(updates).eq('id', id).select().single()
     if (!error) {
       await fetchRelationships() // Refresh list
     }
@@ -113,7 +113,7 @@ export function useRelationships() {
   }
 
   const deleteRelationship = async (id: string) => {
-    const { error } = await db.deleteRelationship(id)
+    const { error } = await supabase.from('relationships').delete().eq('id', id)
     if (!error) {
       await fetchRelationships() // Refresh list
     }
@@ -138,7 +138,7 @@ export function useInteractions(relationshipId: string) {
     if (!relationshipId) return
     
     setLoading(true)
-    const { data, error } = await db.getInteractions(relationshipId)
+    const { data, error } = await supabase.from('interactions').select('*').eq('relationship_id', relationshipId)
     if (!error && data) {
       setInteractions(data)
     }
@@ -150,10 +150,10 @@ export function useInteractions(relationshipId: string) {
   }, [relationshipId])
 
   const createInteraction = async (interactionData: any) => {
-    const { data, error } = await db.createInteraction({
-      relationshipId,
+    const { data, error } = await supabase.from('interactions').insert({
+      relationship_id: relationshipId,
       ...interactionData
-    })
+    }).select().single()
     if (!error) {
       await fetchInteractions() // Refresh list
     }
@@ -174,7 +174,11 @@ export function useQuests(relationshipId?: string) {
 
   const fetchQuests = async () => {
     setLoading(true)
-    const { data, error } = await db.getQuests(relationshipId)
+    let query = supabase.from('quests').select('*')
+    if (relationshipId) {
+      query = query.eq('relationship_id', relationshipId)
+    }
+    const { data, error } = await query
     if (!error && data) {
       setQuests(data)
     }
@@ -186,7 +190,7 @@ export function useQuests(relationshipId?: string) {
   }, [relationshipId])
 
   const createQuest = async (questData: any) => {
-    const { data, error } = await db.createQuest(questData)
+    const { data, error } = await supabase.from('quests').insert(questData).select().single()
     if (!error) {
       await fetchQuests() // Refresh list
     }
@@ -194,7 +198,7 @@ export function useQuests(relationshipId?: string) {
   }
 
   const updateQuest = async (id: string, updates: any) => {
-    const { data, error } = await db.updateQuest(id, updates)
+    const { data, error } = await supabase.from('quests').update(updates).eq('id', id).select().single()
     if (!error) {
       await fetchQuests() // Refresh list
     }
@@ -202,7 +206,8 @@ export function useQuests(relationshipId?: string) {
   }
 
   const generateQuest = async (relationshipId: string, type?: string) => {
-    const { data, error } = await db.generateQuest(relationshipId, type)
+    // Assuming generateQuest is a Supabase function call
+    const { data, error } = await supabase.rpc('generate_quest', { relationship_id: relationshipId, type })
     if (!error) {
       await fetchQuests() // Refresh list
     }
@@ -225,7 +230,9 @@ export function useDashboard() {
 
   const fetchDashboardData = async () => {
     setLoading(true)
-    const { data, error } = await db.getDashboardData()
+    // This assumes getDashboardData is a Supabase function or view
+    // If it's a complex query, it might need to be broken down
+    const { data, error } = await supabase.rpc('get_dashboard_data') // Assuming it's an RPC
     if (!error && data) {
       setDashboardData(data)
     }

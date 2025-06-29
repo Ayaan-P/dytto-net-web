@@ -15,7 +15,8 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const [isLogin, setIsLogin] = useState(true); // State to toggle between login and signup
+  const { login, signUp } = useAuth(); // Get signUp from useAuth
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,11 +28,18 @@ export default function AuthPage() {
 
     setIsLoading(true);
     try {
-      await login(email, password);
-      toast.success('Welcome to Dytto!');
+      if (isLogin) {
+        await login(email, password);
+        toast.success('Welcome back to Dytto!');
+      } else {
+        // Assuming signUp takes email and password
+        await signUp(email, password);
+        toast.success('Welcome to Dytto! Please check your email to confirm your account.');
+      }
       navigate('/');
-    } catch (error) {
-      toast.error('Login failed. Please try again.');
+    } catch (error: any) {
+      console.error('Auth error:', error);
+      toast.error(`Authentication failed: ${error.message || 'Please try again.'}`);
     } finally {
       setIsLoading(false);
     }
@@ -56,13 +64,13 @@ export default function AuthPage() {
             >
               <Sparkles className="h-8 w-8 text-white" />
             </motion.div>
-            <h1 className="text-3xl font-bold text-gradient mb-2">Welcome to Dytto</h1>
+            <h1 className="text-3xl font-bold text-gradient mb-2">{isLogin ? 'Welcome Back' : 'Join Dytto'}</h1>
             <p className="text-muted-foreground">
-              Your intelligent relationship management platform
+              {isLogin ? 'Sign in to your account' : 'Create your account'}
             </p>
           </div>
 
-          {/* Login Form */}
+          {/* Auth Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <PremiumInput
@@ -99,14 +107,25 @@ export default function AuthPage() {
               className="w-full h-12"
               disabled={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? (isLogin ? 'Signing in...' : 'Signing up...') : (isLogin ? 'Sign In' : 'Sign Up')}
             </PremiumButton>
           </form>
+
+          {/* Toggle between Login and Signup */}
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-sm text-primary hover:underline"
+            >
+              {isLogin ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}
+            </button>
+          </div>
 
           {/* Demo Notice */}
           <div className="mt-6 p-4 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground text-center">
-              <strong>Demo Mode:</strong> Use any email and password to sign in
+              <strong>Demo Mode:</strong> Use any email and password to sign in (Supabase email confirmation might still apply for signup depending on your Supabase settings).
             </p>
           </div>
         </PremiumCard>
