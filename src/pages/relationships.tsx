@@ -7,38 +7,72 @@ import { AppShell } from '@/components/layout/app-shell';
 import { PremiumButton } from '@/components/ui/premium-button';
 import { RelationshipCards } from '@/components/dashboard/relationship-cards';
 import { AddRelationshipModal } from '@/components/modals/add-relationship-modal';
-import { RelationshipSearch } from '@/components/features/relationship-search';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
-import { useRelationships } from '@/lib/hooks/use-supabase';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useBackendRelationships } from '@/lib/hooks/use-backend-api';
 import type { Relationship } from '@/lib/types';
 
 export default function RelationshipsPage() {
-  const { relationships, loading } = useRelationships();
+  const { relationships, loading, error } = useBackendRelationships();
   const [showAddModal, setShowAddModal] = useState(false);
-  const [filteredRelationships, setFilteredRelationships] = useState<Relationship[]>(relationships);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
-  const handleResultsChange = useCallback((results: Relationship[]) => {
-    setFilteredRelationships(results);
-  }, []);
 
   if (loading) {
     return (
       <AppShell>
+        <div className="p-6 flex items-center justify-center min-h-[60vh]">
+          <LoadingSpinner size="lg" text="Loading your relationships..." />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppShell>
         <div className="p-6">
-          <div className="animate-pulse space-y-8">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-48 bg-muted rounded"></div>
-              ))}
-            </div>
+          <div className="text-center py-12">
+            <h3 className="text-lg font-semibold mb-2">Error Loading Relationships</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <PremiumButton onClick={() => window.location.reload()}>
+              Try Again
+            </PremiumButton>
           </div>
         </div>
       </AppShell>
     );
   }
+
+  // Transform backend data to match frontend expectations
+  const transformedRelationships: Relationship[] = relationships.map((rel: any) => ({
+    id: rel.id,
+    userId: rel.user_id || '',
+    name: rel.name,
+    bio: rel.bio,
+    level: rel.level || 1,
+    xp: rel.xp || 0,
+    photoUrl: rel.photo_url,
+    categories: rel.categories?.map((cat: string) => ({
+      id: cat,
+      name: cat,
+      color: '#84BABF',
+      icon: 'Users',
+    })) || [],
+    tags: rel.tags?.map((tag: string) => ({
+      id: tag,
+      name: tag,
+      color: '#84BABF',
+    })) || [],
+    lastInteraction: rel.last_interaction ? new Date(rel.last_interaction) : undefined,
+    reminderInterval: rel.reminder_interval || 'weekly',
+    contactInfo: {
+      email: rel.email,
+      phone: rel.phone,
+    },
+    createdAt: new Date(rel.created_at),
+    updatedAt: new Date(rel.updated_at),
+  }));
 
   return (
     <ErrorBoundary>
@@ -89,16 +123,6 @@ export default function RelationshipsPage() {
             </div>
           </motion.div>
 
-          {/* Search and Filters */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="mb-8"
-          >
-            <RelationshipSearch onResultsChange={handleResultsChange} />
-          </motion.div>
-
           {/* Results */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -115,14 +139,8 @@ export default function RelationshipsPage() {
                   onClick: () => setShowAddModal(true)
                 }}
               />
-            ) : filteredRelationships.length === 0 ? (
-              <EmptyState
-                icon={List}
-                title="No matches found"
-                description="Try adjusting your search terms or filters to find what you're looking for."
-              />
             ) : (
-              <RelationshipCards relationships={filteredRelationships} viewMode={viewMode} />
+              <RelationshipCards relationships={transformedRelationships} viewMode={viewMode} />
             )}
           </motion.div>
         </div>

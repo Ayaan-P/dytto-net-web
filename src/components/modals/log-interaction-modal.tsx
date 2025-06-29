@@ -2,26 +2,19 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Smile, Meh, Frown, Sparkles, Send } from 'lucide-react';
+import { X, Sparkles, Send } from 'lucide-react';
 import { PremiumButton } from '@/components/ui/premium-button';
 import { PremiumInput } from '@/components/ui/premium-input';
 import { PremiumCard } from '@/components/ui/premium-card';
 import { Badge } from '@/components/ui/badge';
-import { useAppStore } from '@/lib/store';
-import { analyzeInteraction, calculateXPGain } from '@/lib/utils/ai';
-import type { Relationship, Interaction, Activity } from '@/lib/types';
+import { useBackendInteractions } from '@/lib/hooks/use-backend-api';
+import { toast } from 'sonner';
 
 interface LogInteractionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  relationship: Relationship;
+  relationship: any;
 }
-
-const moodOptions = [
-  { id: 'positive', label: 'Positive', icon: Smile, color: 'text-emerald-500' },
-  { id: 'neutral', label: 'Neutral', icon: Meh, color: 'text-gray-500' },
-  { id: 'negative', label: 'Negative', icon: Frown, color: 'text-red-500' },
-];
 
 const interactionTags = [
   'Deep conversation', 'Casual chat', 'Work discussion', 'Personal sharing',
@@ -30,75 +23,35 @@ const interactionTags = [
 ];
 
 export function LogInteractionModal({ isOpen, onClose, relationship }: LogInteractionModalProps) {
-  const { addInteraction, updateRelationship, addActivity } = useAppStore();
+  const { createInteraction } = useBackendInteractions(relationship?.id);
   const [content, setContent] = useState('');
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) return;
+    if (!content.trim()) {
+      toast.error('Please describe your interaction');
+      return;
+    }
 
-    setIsAnalyzing(true);
-
+    setIsSubmitting(true);
     try {
-      // Analyze interaction with AI
-      const aiAnalysis = await analyzeInteraction(content);
-      const xpGained = calculateXPGain(content, aiAnalysis.sentiment);
-
-      // Create interaction
-      const newInteraction: Interaction = {
-        id: Date.now().toString(),
-        relationshipId: relationship.id,
-        content: content.trim(),
-        sentimentScore: aiAnalysis.sentiment === 'positive' ? 0.8 : 
-                       aiAnalysis.sentiment === 'negative' ? -0.3 : 0.1,
-        xpGained,
-        aiAnalysis,
-        tags: selectedTags,
-        createdAt: new Date(),
-      };
-
-      addInteraction(newInteraction);
-
-      // Update relationship
-      const newXP = relationship.xp + xpGained;
-      const newLevel = Math.floor(newXP / 10) + 1; // Simple leveling formula
-      const leveledUp = newLevel > relationship.level;
-
-      updateRelationship(relationship.id, {
-        xp: newXP,
-        level: Math.min(newLevel, 10), // Cap at level 10
-        lastInteraction: new Date(),
-        updatedAt: new Date(),
+      await createInteraction({
+        relationship_id: relationship.id,
+        interaction_log: content.trim(),
+        tone_tag: selectedTags.length > 0 ? selectedTags[0] : undefined,
       });
-
-      // Add activity
-      const activity: Activity = {
-        id: Date.now().toString(),
-        type: leveledUp ? 'level_up' : 'interaction',
-        relationshipId: relationship.id,
-        relationshipName: relationship.name,
-        title: leveledUp ? `Leveled up with ${relationship.name}!` : 'New interaction logged',
-        description: leveledUp 
-          ? `Reached level ${newLevel} with ${relationship.name}`
-          : `Logged interaction with ${relationship.name}`,
-        timestamp: new Date(),
-        xpGained,
-      };
-
-      addActivity(activity);
-
+      
       // Reset form
       setContent('');
-      setSelectedMood(null);
       setSelectedTags([]);
       onClose();
     } catch (error) {
-      console.error('Error analyzing interaction:', error);
+      // Error is handled in the hook
+      console.error('Failed to log interaction:', error);
     } finally {
-      setIsAnalyzing(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -136,9 +89,9 @@ export function LogInteractionModal({ isOpen, onClose, relationship }: LogIntera
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
-                  {relationship.photoUrl ? (
+                  {relationship.photo_url ? (
                     <img 
-                      src={relationship.photoUrl} 
+                      src={relationship.photo_url} 
                       alt={relationship.name}
                       className="h-12 w-12 rounded-full object-cover"
                     />
@@ -175,35 +128,6 @@ export function LogInteractionModal({ isOpen, onClose, relationship }: LogIntera
                 <p className="text-xs text-muted-foreground mt-2">
                   Be specific! The AI will analyze sentiment and suggest XP based on the depth of your interaction.
                 </p>
-              </div>
-
-              {/* Mood Selection */}
-              <div>
-                <label className="block text-sm font-medium mb-4">How did the interaction feel?</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {moodOptions.map((mood) => {
-                    const Icon = mood.icon;
-                    const isSelected = selectedMood === mood.id;
-                    
-                    return (
-                      <motion.button
-                        key={mood.id}
-                        type="button"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => setSelectedMood(mood.id)}
-                        className={`p-4 rounded-lg border-2 transition-all ${
-                          isSelected 
-                            ? 'border-primary bg-primary/10' 
-                            : 'border-border hover:border-primary/50'
-                        }`}
-                      >
-                        <Icon className={`h-6 w-6 mx-auto mb-2 ${mood.color}`} />
-                        <p className="text-sm font-medium">{mood.label}</p>
-                      </motion.button>
-                    );
-                  })}
-                </div>
               </div>
 
               {/* Interaction Tags */}
@@ -250,7 +174,7 @@ export function LogInteractionModal({ isOpen, onClose, relationship }: LogIntera
                   variant="outline"
                   onClick={onClose}
                   className="flex-1"
-                  disabled={isAnalyzing}
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </PremiumButton>
@@ -258,12 +182,12 @@ export function LogInteractionModal({ isOpen, onClose, relationship }: LogIntera
                   type="submit"
                   variant="gradient"
                   className="flex-1"
-                  disabled={!content.trim() || isAnalyzing}
+                  disabled={!content.trim() || isSubmitting}
                 >
-                  {isAnalyzing ? (
+                  {isSubmitting ? (
                     <>
                       <Sparkles className="h-4 w-4 mr-2 animate-spin" />
-                      Analyzing...
+                      Processing...
                     </>
                   ) : (
                     <>
