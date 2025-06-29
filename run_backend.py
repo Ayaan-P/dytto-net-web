@@ -59,6 +59,7 @@ def run_server():
         # Set Flask environment variables
         os.environ['FLASK_APP'] = 'app.py'
         os.environ['FLASK_ENV'] = 'development'
+        os.environ['FLASK_DEBUG'] = 'true'  # Enable debug mode for better error messages
         
         # Run the Flask app
         subprocess.run([sys.executable, "app.py"], check=True)
@@ -66,6 +67,7 @@ def run_server():
         print("\n👋 Server stopped by user")
     except subprocess.CalledProcessError as e:
         print(f"❌ Error running server: {e}")
+        print("💡 Check the error messages above for more details about what went wrong.")
         sys.exit(1)
 
 def main():
