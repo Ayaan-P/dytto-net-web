@@ -8,25 +8,22 @@ import { PremiumCard } from '@/components/ui/premium-card';
 import { PremiumButton } from '@/components/ui/premium-button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { useAppStore } from '@/lib/store';
 import { getXPProgressForCurrentLevel, getLevelColor, getLevelTitle } from '@/lib/utils/levels';
 import { RelationshipDetailModal } from '@/components/modals/relationship-detail-modal';
 import { LogInteractionModal } from '@/components/modals/log-interaction-modal';
 import type { Relationship } from '@/lib/types';
 
 interface RelationshipCardsProps {
-  relationships?: Relationship[];
+  relationships?: any[];
   viewMode?: 'grid' | 'list';
 }
 
 export function RelationshipCards({ 
-  relationships: propRelationships, 
+  relationships = [], 
   viewMode = 'grid' 
 }: RelationshipCardsProps) {
-  const { relationships: storeRelationships } = useAppStore();
-  const relationships = propRelationships || storeRelationships;
-  const [selectedRelationship, setSelectedRelationship] = useState<Relationship | null>(null);
-  const [logInteractionRelationship, setLogInteractionRelationship] = useState<Relationship | null>(null);
+  const [selectedRelationship, setSelectedRelationship] = useState<any | null>(null);
+  const [logInteractionRelationship, setLogInteractionRelationship] = useState<any | null>(null);
 
   if (relationships.length === 0) {
     return (
@@ -52,9 +49,11 @@ export function RelationshipCards({
       <>
         <div className="space-y-4">
           {relationships.map((relationship, index) => {
-            const xpProgress = getXPProgressForCurrentLevel(relationship.xp, relationship.level);
-            const levelColor = getLevelColor(relationship.level);
-            const levelTitle = getLevelTitle(relationship.level);
+            const level = relationship.level || 1;
+            const xp = relationship.xp || 0;
+            const xpProgress = getXPProgressForCurrentLevel(xp, level);
+            const levelColor = getLevelColor(level);
+            const levelTitle = getLevelTitle(level);
             
             return (
               <motion.div
@@ -70,9 +69,9 @@ export function RelationshipCards({
                   <div className="flex items-center gap-6">
                     {/* Avatar */}
                     <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center flex-shrink-0">
-                      {relationship.photoUrl ? (
+                      {relationship.photo_url ? (
                         <img 
-                          src={relationship.photoUrl} 
+                          src={relationship.photo_url} 
                           alt={relationship.name}
                           className="h-16 w-16 rounded-full object-cover"
                         />
@@ -95,7 +94,7 @@ export function RelationshipCards({
                             variant="secondary"
                             style={{ backgroundColor: `${levelColor}20`, color: levelColor }}
                           >
-                            Level {relationship.level}
+                            Level {level}
                           </Badge>
                         </div>
                       </div>
@@ -108,21 +107,15 @@ export function RelationshipCards({
 
                       {/* Categories */}
                       <div className="flex flex-wrap gap-2 mb-3">
-                        {relationship.categories.slice(0, 3).map((category) => (
+                        {relationship.categories && relationship.categories.map((category: any, i: number) => (
                           <Badge 
-                            key={category.id} 
+                            key={i} 
                             variant="outline"
                             className="text-xs"
-                            style={{ borderColor: category.color, color: category.color }}
                           >
-                            {category.name}
+                            {typeof category === 'string' ? category : category.name}
                           </Badge>
                         ))}
-                        {relationship.categories.length > 3 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{relationship.categories.length - 3}
-                          </Badge>
-                        )}
                       </div>
 
                       {/* Progress */}
@@ -147,23 +140,23 @@ export function RelationshipCards({
 
                     {/* Contact Info */}
                     <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                      {relationship.contactInfo.email && (
+                      {relationship.email && (
                         <div className="flex items-center gap-2">
                           <Mail className="h-4 w-4" />
-                          <span className="truncate max-w-[150px]">{relationship.contactInfo.email}</span>
+                          <span className="truncate max-w-[150px]">{relationship.email}</span>
                         </div>
                       )}
-                      {relationship.contactInfo.phone && (
+                      {relationship.phone && (
                         <div className="flex items-center gap-2">
                           <Phone className="h-4 w-4" />
-                          <span>{relationship.contactInfo.phone}</span>
+                          <span>{relationship.phone}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4" />
                         <span>
-                          {relationship.lastInteraction 
-                            ? format(relationship.lastInteraction, 'MMM d')
+                          {relationship.last_interaction 
+                            ? format(new Date(relationship.last_interaction), 'MMM d')
                             : 'No contact'
                           }
                         </span>
@@ -220,14 +213,16 @@ export function RelationshipCards({
     );
   }
 
-  // Grid view (existing implementation)
+  // Grid view
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {relationships.map((relationship, index) => {
-          const xpProgress = getXPProgressForCurrentLevel(relationship.xp, relationship.level);
-          const levelColor = getLevelColor(relationship.level);
-          const levelTitle = getLevelTitle(relationship.level);
+          const level = relationship.level || 1;
+          const xp = relationship.xp || 0;
+          const xpProgress = getXPProgressForCurrentLevel(xp, level);
+          const levelColor = getLevelColor(level);
+          const levelTitle = getLevelTitle(level);
           
           return (
             <motion.div
@@ -244,9 +239,9 @@ export function RelationshipCards({
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
-                      {relationship.photoUrl ? (
+                      {relationship.photo_url ? (
                         <img 
-                          src={relationship.photoUrl} 
+                          src={relationship.photo_url} 
                           alt={relationship.name}
                           className="h-12 w-12 rounded-full object-cover"
                         />
@@ -280,7 +275,7 @@ export function RelationshipCards({
                 {/* Level and XP */}
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Level {relationship.level}</span>
+                    <span className="text-sm font-medium">Level {level}</span>
                     <span className="text-sm text-muted-foreground">
                       {xpProgress.current}/{xpProgress.required} XP
                     </span>
@@ -296,16 +291,16 @@ export function RelationshipCards({
 
                 {/* Categories */}
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {relationship.categories.slice(0, 2).map((category) => (
+                  {relationship.categories && relationship.categories.slice(0, 2).map((category: any, i: number) => (
                     <Badge 
-                      key={category.id} 
+                      key={i} 
                       variant="secondary"
-                      style={{ backgroundColor: `${category.color}20`, color: category.color }}
+                      style={{ backgroundColor: `${levelColor}20`, color: levelColor }}
                     >
-                      {category.name}
+                      {typeof category === 'string' ? category : category.name}
                     </Badge>
                   ))}
-                  {relationship.categories.length > 2 && (
+                  {relationship.categories && relationship.categories.length > 2 && (
                     <Badge variant="outline">
                       +{relationship.categories.length - 2} more
                     </Badge>
@@ -316,8 +311,8 @@ export function RelationshipCards({
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
-                    {relationship.lastInteraction 
-                      ? format(relationship.lastInteraction, 'MMM d')
+                    {relationship.last_interaction 
+                      ? format(new Date(relationship.last_interaction), 'MMM d')
                       : 'No interactions yet'
                     }
                   </div>

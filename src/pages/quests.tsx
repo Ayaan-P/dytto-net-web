@@ -16,17 +16,60 @@ import { AppShell } from '@/components/layout/app-shell';
 import { PremiumCard } from '@/components/ui/premium-card';
 import { PremiumButton } from '@/components/ui/premium-button';
 import { Badge } from '@/components/ui/badge';
-import { useQuests } from '@/lib/hooks/use-supabase';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useBackendRelationships } from '@/lib/hooks/use-backend-api';
+import { toast } from 'sonner';
+import { api } from '@/lib/api/client';
 
 export default function QuestsPage() {
-  const { quests, loading, updateQuest } = useQuests();
+  const { relationships, loading: relationshipsLoading } = useBackendRelationships();
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'available'>('active');
+  const [selectedRelationship, setSelectedRelationship] = useState<number | null>(null);
+  const [quests, setQuests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch all quests for all relationships
+  const fetchAllQuests = useCallback(async () => {
+    if (relationshipsLoading || !relationships.length) return;
+    
+    setLoading(true);
+    try {
+      const allQuests = [];
+      for (const relationship of relationships) {
+        try {
+          const relationshipQuests = await api.relationships.getQuests(relationship.id);
+          // Add relationship info to each quest
+          const enhancedQuests = relationshipQuests.map((quest: any) => ({
+            ...quest,
+            relationshipName: relationship.name,
+            relationshipPhotoUrl: relationship.photo_url
+          }));
+          allQuests.push(...enhancedQuests);
+        } catch (error) {
+          console.error(`Error fetching quests for relationship ${relationship.id}:`, error);
+        }
+      }
+      setQuests(allQuests);
+    } catch (error) {
+      console.error('Error fetching all quests:', error);
+      toast.error('Failed to load quests');
+    } finally {
+      setLoading(false);
+    }
+  }, [relationships, relationshipsLoading]);
+
+  // Fetch quests when relationships are loaded
+  React.useEffect(() => {
+    if (!relationshipsLoading && relationships.length > 0) {
+      fetchAllQuests();
+    }
+  }, [relationships, relationshipsLoading, fetchAllQuests]);
 
   // Memoize quest data
   const questData = useMemo(() => {
-    const activeQuests = quests.filter(q => q.status === 'pending');
-    const completedQuests = quests.filter(q => q.status === 'completed');
-    const totalXPEarned = completedQuests.reduce((sum, q) => sum + q.xp_reward, 0);
+    const activeQuests = quests.filter(q => q.quest_status === 'pending');
+    const completedQuests = quests.filter(q => q.quest_status === 'completed');
+    const totalXPEarned = completedQuests.reduce((sum, q) => sum + 2, 0); // Assuming 2 XP per quest
     const completionRate = quests.length > 0 ? Math.floor((completedQuests.length / quests.length) * 100) : 0;
 
     return {
@@ -37,42 +80,43 @@ export default function QuestsPage() {
     };
   }, [quests]);
 
-  const difficultyColors = {
-    easy: '#10b981',
-    medium: '#f59e0b',
-    hard: '#ef4444',
-  };
-
-  const typeIcons = {
-    daily: Clock,
-    weekly: Calendar,
-    milestone: Trophy,
-    custom: Star,
-  };
-
   const handleTabChange = useCallback((tab: 'active' | 'completed' | 'available') => {
     setActiveTab(tab);
   }, []);
 
-  const handleCompleteQuest = useCallback(async (questId: string) => {
-    await updateQuest(questId, { 
-      status: 'completed',
-      completion_date: new Date().toISOString()
-    });
-  }, [updateQuest]);
+  const handleCompleteQuest = useCallback(async (questId: number) => {
+    setLoading(true);
+    try {
+      await api.quests.update(questId, { quest_status: 'completed' });
+      toast.success('Quest completed! XP awarded.');
+      fetchAllQuests(); // Refresh quests
+    } catch (error) {
+      console.error('Failed to complete quest:', error);
+      toast.error('Failed to complete quest');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchAllQuests]);
 
-  if (loading) {
+  const handleGenerateQuest = useCallback(async (relationshipId: number) => {
+    setLoading(true);
+    try {
+      await api.relationships.generateQuest(relationshipId);
+      toast.success('New quest generated!');
+      fetchAllQuests(); // Refresh quests
+    } catch (error) {
+      console.error('Failed to generate quest:', error);
+      toast.error('Failed to generate quest');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchAllQuests]);
+
+  if (relationshipsLoading || loading) {
     return (
       <AppShell>
-        <div className="p-6">
-          <div className="animate-pulse space-y-8">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-48 bg-muted rounded"></div>
-              ))}
-            </div>
-          </div>
+        <div className="p-6 flex items-center justify-center min-h-[60vh]">
+          <LoadingSpinner size="lg" text="Loading quests..." />
         </div>
       </AppShell>
     );
@@ -95,10 +139,34 @@ export default function QuestsPage() {
             </p>
           </div>
           
-          <PremiumButton variant="gradient">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Quest
-          </PremiumButton>
+          <div className="flex gap-2">
+            <select 
+              className="premium-input"
+              value={selectedRelationship || ''}
+              onChange={(e) => setSelectedRelationship(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">All Relationships</option>
+              {relationships.map((rel) => (
+                <option key={rel.id} value={rel.id}>{rel.name}</option>
+              ))}
+            </select>
+            
+            <PremiumButton 
+              variant="gradient"
+              onClick={() => {
+                if (selectedRelationship) {
+                  handleGenerateQuest(selectedRelationship);
+                } else if (relationships.length > 0) {
+                  handleGenerateQuest(relationships[0].id);
+                } else {
+                  toast.error('Please add a relationship first');
+                }
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Generate Quest
+            </PremiumButton>
+          </div>
         </motion.div>
 
         {/* Stats Overview */}
@@ -168,7 +236,6 @@ export default function QuestsPage() {
             {[
               { id: 'active', label: 'Active Quests', count: questData.activeQuests.length },
               { id: 'completed', label: 'Completed', count: questData.completedQuests.length },
-              { id: 'available', label: 'Available', count: 3 },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -196,74 +263,87 @@ export default function QuestsPage() {
           >
             {activeTab === 'active' && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {questData.activeQuests.map((quest, index) => {
-                  const Icon = typeIcons[quest.type as keyof typeof typeIcons] || Star;
-                  return (
-                    <motion.div
-                      key={quest.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.3, delay: index * 0.1 }}
-                      whileHover={{ y: -4 }}
-                      className="cursor-pointer"
-                    >
-                      <PremiumCard className="p-6 hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <div className="p-2 rounded-lg bg-primary/10">
-                              <Icon className="h-5 w-5 text-primary" />
+                {questData.activeQuests
+                  .filter(quest => !selectedRelationship || quest.relationship_id === selectedRelationship)
+                  .map((quest, index) => {
+                    const Icon = quest.milestone_level ? Trophy : Target;
+                    return (
+                      <motion.div
+                        key={quest.id}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3, delay: index * 0.1 }}
+                        whileHover={{ y: -4 }}
+                        className="cursor-pointer"
+                      >
+                        <PremiumCard className="p-6 hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <div className="p-2 rounded-lg bg-primary/10">
+                                <Icon className="h-5 w-5 text-primary" />
+                              </div>
+                              {quest.milestone_level && (
+                                <Badge variant="secondary">
+                                  Level {quest.milestone_level}
+                                </Badge>
+                              )}
                             </div>
-                            <Badge 
-                              variant="secondary"
-                              style={{ 
-                                backgroundColor: `${difficultyColors[quest.difficulty as keyof typeof difficultyColors]}20`, 
-                                color: difficultyColors[quest.difficulty as keyof typeof difficultyColors] 
-                              }}
-                            >
-                              {quest.difficulty}
+                            <Badge variant="outline">
+                              +2 XP
                             </Badge>
                           </div>
-                          <Badge variant="outline">
-                            +{quest.xp_reward} XP
-                          </Badge>
-                        </div>
-                        
-                        <h3 className="font-semibold text-lg mb-2">{quest.title}</h3>
-                        <p className="text-muted-foreground text-sm mb-4">{quest.description}</p>
-                        
-                        {quest.deadline && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-                            <Clock className="h-4 w-4" />
-                            Due {new Date(quest.deadline).toLocaleDateString()}
+                          
+                          <h3 className="font-semibold text-lg mb-2">{quest.relationshipName}</h3>
+                          <p className="text-muted-foreground text-sm mb-4">{quest.quest_description}</p>
+                          
+                          <div className="flex gap-2">
+                            <PremiumButton 
+                              variant="gradient" 
+                              size="sm" 
+                              className="flex-1"
+                              onClick={() => handleCompleteQuest(quest.id)}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Complete
+                            </PremiumButton>
                           </div>
-                        )}
-                        
-                        <div className="flex gap-2">
-                          <PremiumButton 
-                            variant="gradient" 
-                            size="sm" 
-                            className="flex-1"
-                            onClick={() => handleCompleteQuest(quest.id)}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Complete
-                          </PremiumButton>
-                          <PremiumButton variant="outline" size="sm">
-                            Skip
-                          </PremiumButton>
-                        </div>
-                      </PremiumCard>
-                    </motion.div>
-                  );
-                })}
+                        </PremiumCard>
+                      </motion.div>
+                    );
+                  })}
+                
+                {questData.activeQuests
+                  .filter(quest => !selectedRelationship || quest.relationship_id === selectedRelationship)
+                  .length === 0 && (
+                  <div className="col-span-full text-center py-12">
+                    <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold mb-2">No active quests</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Generate new quests to deepen your relationships
+                    </p>
+                    <PremiumButton
+                      variant="gradient"
+                      onClick={() => {
+                        if (selectedRelationship) {
+                          handleGenerateQuest(selectedRelationship);
+                        } else if (relationships.length > 0) {
+                          handleGenerateQuest(relationships[0].id);
+                        }
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Generate Quest
+                    </PremiumButton>
+                  </div>
+                )}
               </div>
             )}
 
             {activeTab === 'completed' && (
               <div className="space-y-4">
-                {questData.completedQuests.map((quest, index) => {
-                  const Icon = typeIcons[quest.type as keyof typeof typeIcons] || Star;
-                  return (
+                {questData.completedQuests
+                  .filter(quest => !selectedRelationship || quest.relationship_id === selectedRelationship)
+                  .map((quest, index) => (
                     <motion.div
                       key={quest.id}
                       initial={{ opacity: 0, x: -20 }}
@@ -279,35 +359,36 @@ export default function QuestsPage() {
                           
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold">{quest.title}</h3>
+                              <h3 className="font-semibold">{quest.relationshipName}</h3>
                               <Badge variant="secondary">
-                                +{quest.xp_reward} XP
+                                +2 XP
                               </Badge>
                             </div>
-                            <p className="text-sm text-muted-foreground">{quest.description}</p>
+                            <p className="text-sm text-muted-foreground">{quest.quest_description}</p>
                           </div>
                           
                           <div className="text-right">
                             <p className="text-sm text-muted-foreground">Completed</p>
                             <p className="text-xs text-muted-foreground">
-                              {quest.completion_date ? new Date(quest.completion_date).toLocaleDateString() : 'Recently'}
+                              {quest.completion_date ? format(new Date(quest.completion_date), 'MMM d, yyyy') : 'Recently'}
                             </p>
                           </div>
                         </div>
                       </PremiumCard>
                     </motion.div>
-                  );
-                })}
-              </div>
-            )}
-
-            {activeTab === 'available' && (
-              <div className="text-center py-12">
-                <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">More quests coming soon!</h3>
-                <p className="text-muted-foreground">
-                  We're working on more exciting challenges for you.
-                </p>
+                  ))}
+                
+                {questData.completedQuests
+                  .filter(quest => !selectedRelationship || quest.relationship_id === selectedRelationship)
+                  .length === 0 && (
+                  <div className="text-center py-12">
+                    <Trophy className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold mb-2">No completed quests yet</h3>
+                    <p className="text-muted-foreground">
+                      Complete quests to see them here
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </motion.div>

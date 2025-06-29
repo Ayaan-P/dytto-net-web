@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart3, 
@@ -17,45 +17,70 @@ import { PremiumCard } from '@/components/ui/premium-card';
 import { PremiumButton } from '@/components/ui/premium-button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { useRelationships, useInteractions } from '@/lib/hooks/use-supabase';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useBackendRelationships } from '@/lib/hooks/use-backend-api';
 import { getLevelColor, getLevelTitle } from '@/lib/utils/levels';
 import { format, subDays } from 'date-fns';
 
 export default function AnalyticsPage() {
-  const { relationships } = useRelationships();
+  const { relationships, loading } = useBackendRelationships();
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
 
-  // Memoize calculations to prevent unnecessary recalculations
-  const analyticsData = useMemo(() => {
-    const totalXP = relationships.reduce((sum, rel) => sum + rel.xp, 0);
-    const averageLevel = relationships.length > 0 
-      ? relationships.reduce((sum, rel) => sum + rel.level, 0) / relationships.length 
-      : 1;
+  // Calculate analytics data when relationships are loaded
+  useEffect(() => {
+    if (!loading && relationships.length > 0) {
+      const totalXP = relationships.reduce((sum, rel) => sum + (rel.xp || 0), 0);
+      const averageLevel = relationships.length > 0 
+        ? relationships.reduce((sum, rel) => sum + (rel.level || 1), 0) / relationships.length 
+        : 1;
 
-    const categoryDistribution = relationships.reduce((acc, rel) => {
-      rel.categories.forEach(cat => {
-        acc[cat.name] = (acc[cat.name] || 0) + 1;
+      // Calculate category distribution
+      const categoryDistribution: Record<string, number> = {};
+      relationships.forEach(rel => {
+        if (rel.categories) {
+          rel.categories.forEach((cat: string) => {
+            categoryDistribution[cat] = (categoryDistribution[cat] || 0) + 1;
+          });
+        }
       });
-      return acc;
-    }, {} as Record<string, number>);
 
-    const levelDistribution = relationships.reduce((acc, rel) => {
-      const levelRange = rel.level <= 3 ? '1-3' : rel.level <= 6 ? '4-6' : '7-10';
-      acc[levelRange] = (acc[levelRange] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+      // Calculate level distribution
+      const levelDistribution: Record<string, number> = {
+        '1-3': 0,
+        '4-6': 0,
+        '7-10': 0
+      };
+      
+      relationships.forEach(rel => {
+        const level = rel.level || 1;
+        if (level <= 3) levelDistribution['1-3']++;
+        else if (level <= 6) levelDistribution['4-6']++;
+        else levelDistribution['7-10']++;
+      });
 
-    return {
-      totalXP,
-      averageLevel,
-      categoryDistribution,
-      levelDistribution
-    };
-  }, [relationships, timeRange]);
+      setAnalyticsData({
+        totalXP,
+        averageLevel,
+        categoryDistribution,
+        levelDistribution
+      });
+    }
+  }, [relationships, loading, timeRange]);
 
   const handleTimeRangeChange = (range: 'week' | 'month' | 'year') => {
     setTimeRange(range);
   };
+
+  if (loading || !analyticsData) {
+    return (
+      <AppShell>
+        <div className="p-6 flex items-center justify-center min-h-[60vh]">
+          <LoadingSpinner size="lg" text="Analyzing your relationships..." />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -138,7 +163,14 @@ export default function AnalyticsPage() {
                 <MessageCircle className="h-5 w-5 text-amber-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">
+                  {relationships.reduce((count, rel) => {
+                    const lastInteraction = rel.last_interaction ? new Date(rel.last_interaction) : null;
+                    const oneWeekAgo = new Date();
+                    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+                    return count + (lastInteraction && lastInteraction > oneWeekAgo ? 1 : 0);
+                  }, 0)}
+                </p>
                 <p className="text-sm text-muted-foreground">Recent Interactions</p>
               </div>
             </div>
@@ -163,7 +195,7 @@ export default function AnalyticsPage() {
               </h3>
               <div className="space-y-4">
                 {Object.entries(analyticsData.categoryDistribution).map(([category, count]) => {
-                  const percentage = (count / relationships.length) * 100;
+                  const percentage = (count as number / relationships.length) * 100;
                   return (
                     <div key={category}>
                       <div className="flex justify-between mb-2">
@@ -185,7 +217,7 @@ export default function AnalyticsPage() {
               </h3>
               <div className="space-y-4">
                 {Object.entries(analyticsData.levelDistribution).map(([range, count]) => {
-                  const percentage = (count / relationships.length) * 100;
+                  const percentage = (count as number / relationships.length) * 100;
                   const color = range === '1-3' ? '#6b7280' : range === '4-6' ? '#3b82f6' : '#8b5cf6';
                   return (
                     <div key={range}>
@@ -219,7 +251,7 @@ export default function AnalyticsPage() {
             </h3>
             <div className="space-y-4">
               {relationships
-                .sort((a, b) => b.xp - a.xp)
+                .sort((a, b) => (b.xp || 0) - (a.xp || 0))
                 .slice(0, 5)
                 .map((relationship, index) => (
                   <motion.div 
@@ -249,19 +281,19 @@ export default function AnalyticsPage() {
                     
                     <div className="flex-1">
                       <p className="font-medium">{relationship.name}</p>
-                      <p className="text-sm text-muted-foreground">{getLevelTitle(relationship.level)}</p>
+                      <p className="text-sm text-muted-foreground">{getLevelTitle(relationship.level || 1)}</p>
                     </div>
                     
                     <div className="text-right">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge 
                           variant="secondary"
-                          style={{ backgroundColor: `${getLevelColor(relationship.level)}20`, color: getLevelColor(relationship.level) }}
+                          style={{ backgroundColor: `${getLevelColor(relationship.level || 1)}20`, color: getLevelColor(relationship.level || 1) }}
                         >
-                          Level {relationship.level}
+                          Level {relationship.level || 1}
                         </Badge>
                       </div>
-                      <p className="text-sm font-medium">{relationship.xp} XP</p>
+                      <p className="text-sm font-medium">{relationship.xp || 0} XP</p>
                     </div>
                   </motion.div>
                 ))}

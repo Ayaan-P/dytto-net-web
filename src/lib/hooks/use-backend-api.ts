@@ -115,10 +115,8 @@ export function useBackendInteractions(relationshipId?: number) {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.interactions.getAll();
-      // Filter by relationship ID on the frontend for now
-      const filtered = data.filter((interaction: any) => interaction.relationship_id === relationshipId);
-      setInteractions(filtered);
+      const data = await api.relationships.getInteractionsThread(relationshipId);
+      setInteractions(data);
     } catch (err) {
       const errorMessage = err instanceof ApiError ? err.message : 'Failed to fetch interactions';
       setError(errorMessage);
@@ -163,16 +161,12 @@ export function useBackendQuests(relationshipId?: number) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchQuests = useCallback(async () => {
+    if (!relationshipId) return;
+    
     try {
       setLoading(true);
       setError(null);
-      let data;
-      if (relationshipId) {
-        data = await api.relationships.getQuests(relationshipId);
-      } else {
-        // For now, we'll need to implement a general quests endpoint
-        data = [];
-      }
+      const data = await api.relationships.getQuests(relationshipId);
       setQuests(data);
     } catch (err) {
       const errorMessage = err instanceof ApiError ? err.message : 'Failed to fetch quests';
@@ -209,8 +203,10 @@ export function useBackendQuests(relationshipId?: number) {
   }, [fetchQuests]);
 
   useEffect(() => {
-    fetchQuests();
-  }, [fetchQuests]);
+    if (relationshipId) {
+      fetchQuests();
+    }
+  }, [relationshipId, fetchQuests]);
 
   return {
     quests,
