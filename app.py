@@ -1,5 +1,6 @@
 import os
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from services.ai_processing import analyze_sentiment, calculate_xp, get_relationship_level, update_relationship_level, process_interaction_log_ai, detect_patterns, suggest_evolution, suggest_interaction
@@ -16,6 +17,9 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Configure CORS to allow requests from the frontend
+CORS(app, origins=["http://localhost:3000", "https://localhost:3000"])
 
 # Get Supabase credentials from environment variables
 url: str = os.environ.get("SUPABASE_URL")
@@ -541,7 +545,7 @@ def get_relationship_quests(relationship_id):
     if not supabase: return jsonify({"error": "Supabase is not initialized."}), 500
     try:
         response = supabase.table('quests').select("*").eq('relationship_id', relationship_id).execute()
-        if hasattr(response, 'error') and response.error: return jsonify({"error": response.error.message}), 500
+        if hasattr(response, 'error') and response.error: return jsonify({"error": response.error.message}"), 500
         return jsonify([dict(row) for row in response.data]), 200
     except Exception as e: return jsonify({"error": str(e)}), 500
 
